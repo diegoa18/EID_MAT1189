@@ -1,5 +1,5 @@
 from flask import Flask, request, jsonify
-from solar_optimization import SolarPanelModel
+from src.core.solar_optimization import SolarPanelModel
 
 app = Flask(__name__)
 
