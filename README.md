@@ -8,15 +8,43 @@ Este proyecto implementa el modelo matemático descrito para la optimización de
 - `venv/`: Entorno virtual de Python con las dependencias necesarias.
 - `solar_optimization_plots.png`: Imagen generada tras ejecutar el script, mostrando la superficie de energía y las curvas de nivel.
 
-## Modelo matemático implementado
+## Fundamento Teórico y Modelo Matemático
 
-El sistema modela la energía captada por un panel solar mediante:
-`E(θ, ϕ) = A cos(θ - θ_0) cos(ϕ - ϕ_0)`
+El modelo matemático y sus componentes implementados en este proyecto se basan en las directrices establecidas en el documento de investigación del curso:
+
+> **Referencia Bibliográfica:**
+> Yunge, V. (2026). *PROYECTO FINAL 5: Optimización de paneles solares*. Departamento de Ciencias Matemáticas y Físicas, Curso MATE1189 - Cálculo Avanzado. Universidad Católica de Temuco.
+
+### 1. Función de Energía Captada
+
+El sistema modela la energía captada por un panel solar utilizando una función de dos variables que describe la disminución de eficiencia a medida que el panel se aleja de su posición óptima:
+
+$$ E(\theta, \phi) = A \cos(\theta - \theta_0) \cos(\phi - \phi_0) $$
 
 Donde:
-- `A`: Energía máxima posible de captar.
-- `θ_0`: Inclinación ideal de la ubicación.
-- `ϕ_0`: Orientación ideal de la ubicación.
+- $\theta$: Ángulo de inclinación respecto de la horizontal.
+- $\phi$: Ángulo de orientación respecto del norte geográfico.
+- $A > 0$: Representa la máxima energía posible de captar en la ubicación.
+- $\theta_0$: Corresponde al ángulo de inclinación ideal para la ubicación.
+- $\phi_0$: Corresponde a la orientación ideal para la ubicación geográfica estudiada.
+
+### 2. Derivadas Parciales y Sensibilidad
+
+Para evaluar la sensibilidad del sistema frente a errores de instalación y entender la tasa de cambio de la energía, se computan analíticamente las derivadas parciales de la función:
+
+- **Derivada respecto a la inclinación ($\theta$):**
+  $$ \frac{\partial E}{\partial \theta} = -A \sin(\theta - \theta_0) \cos(\phi - \phi_0) $$
+
+- **Derivada respecto a la orientación ($\phi$):**
+  $$ \frac{\partial E}{\partial \phi} = -A \cos(\theta - \theta_0) \sin(\phi - \phi_0) $$
+
+### 3. Gradiente y Optimización
+
+El vector gradiente construido se utiliza para determinar la dirección de máximo incremento de la energía captada. Su implementación computacional evalúa:
+
+$$ \nabla E(\theta, \phi) = \left( \frac{\partial E}{\partial \theta}, \frac{\partial E}{\partial \phi} \right) $$
+
+Al igualar $\nabla E(\theta, \phi) = \mathbf{0}$, se determinan matemáticamente las configuraciones óptimas de instalación del panel ($\theta = \theta_0$ y $\phi = \phi_0$).
 
 ## Ejecución
 
