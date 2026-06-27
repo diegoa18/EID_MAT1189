@@ -31,7 +31,7 @@ with col_param:
         "Potencia nominal del panel (kW)", min_value=0.1, value=1.0, step=0.1
     )
 
-    estacion = st.selectbox("Estación", ["Verano", "Otoño", "Invierno", "Primavera"])
+    estacion = st.selectbox("Estación", ["summer", "autumn", "winter", "spring"])
 
     ejecutar = st.button("☀️ Simular", use_container_width=True)
 
@@ -45,7 +45,7 @@ if ejecutar:
         longitude=longitud,
         width=ancho,
         height=alto,
-        season=estacion.lower(),
+        season=estacion,
         power_gen_kw=power_gen_kw,
     )
 
