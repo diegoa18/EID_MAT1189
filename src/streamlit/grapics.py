@@ -1,121 +1,166 @@
-"""
-esta wea de acá es para graficar en 3d, te genera un sol qlo y se mueve pa cachar ma o ma despues como varia dependiendo de la posicion del sol
-"""
+import math
 
 import numpy as np
+import pandas as pd
+import plotly.express as px
 import plotly.graph_objects as go
 
 import streamlit as st
+from api import obtener_superficie
 
 
-def rotar_puntos(x, y, z, theta, phi):
-    """
-    Rotación 3D simple del panel
-    """
+def surface_plot_E(A, theta0, phi0, res=40, current_point=None):
 
-    theta = np.radians(theta)
-    phi = np.radians(phi)
+    data = obtener_superficie(A, theta0, phi0, res)
+    if data.get("status") != "success":
+        st.error("No se pudo generar la superficie")
+        return
 
-    # Rotación en Y (inclinación)
-    R_theta = np.array(
-        [
-            [np.cos(theta), 0, np.sin(theta)],
-            [0, 1, 0],
-            [-np.sin(theta), 0, np.cos(theta)],
-        ]
-    )
-
-    # Rotación en Z (orientación)
-    R_phi = np.array(
-        [[np.cos(phi), -np.sin(phi), 0], [np.sin(phi), np.cos(phi), 0], [0, 0, 1]]
-    )
-
-    R = R_phi @ R_theta
-
-    puntos = np.vstack([x, y, z])
-    rotados = R @ puntos
-
-    return rotados[0], rotados[1], rotados[2]
-
-
-def posicion_sol(hora):
-    """
-    Movimiento circular del sol en el cielo (modelo visual)
-    """
-
-    # Convertimos hora a ángulo (0 a 2π)
-    angulo = (hora / 24) * 2 * np.pi
-
-    # Radio del "cielo"
-    R = 5
-
-    # Movimiento en arco
-    x = R * np.cos(angulo)
-    y = R * np.sin(angulo)
-
-    # Altura (sube al mediodía)
-    z = max(0, R * np.sin(angulo))
-
-    return x, y, z
-
-
-def grafico_panel_3d(
-    ancho, alto, theta: float = 30.0, phi: float = 180.0, hora: float = 12.0
-):
-    # ---------------------------
-    # Panel base (rectángulo)
-    # ---------------------------
-
-    x = np.array([-ancho / 2, ancho / 2, ancho / 2, -ancho / 2])
-    y = np.array([0, 0, 0, 0])
-    z = np.array([0, 0, alto, alto])
-
-    xr, yr, zr = rotar_puntos(x, y, z, theta, phi)
+    Theta, Phi = np.meshgrid(data["theta"], data["phi"])
+    E = np.array(data["E"])
 
     fig = go.Figure()
 
     fig.add_trace(
-        go.Mesh3d(x=xr, y=yr, z=zr, color="royalblue", opacity=0.85, name="Panel")
-    )
-
-    # ---------------------------
-    # Sol
-    # ---------------------------
-
-    sun_x, sun_y, sun_z = posicion_sol(hora)
-
-    fig.add_trace(
-        go.Scatter3d(
-            x=[sun_x],
-            y=[sun_y],
-            z=[sun_z],
-            mode="markers",
-            marker=dict(size=8, color="yellow"),
-            name="Sol",
+        go.Surface(
+            z=E,
+            x=Phi,
+            y=Theta,
+            colorscale="viridis",
+            opacity=0.9,
+            colorbar=dict(title="E (kW)"),
         )
     )
 
-    # ---------------------------
-    # Rayos solares
-    # ---------------------------
-
-    fig.add_trace(
-        go.Scatter3d(
-            x=[sun_x, 0],
-            y=[sun_y, 0],
-            z=[sun_z, 0],
-            mode="lines",
-            line=dict(color="orange", width=4),
-            name="Radiación",
+    if current_point:
+        theta_c, phi_c, E_c = current_point
+        fig.add_trace(
+            go.Scatter3d(
+                x=[phi_c],
+                y=[theta_c],
+                z=[E_c],
+                mode="markers",
+                marker=dict(size=8, color="red", symbol="circle"),
+                name="Configuración actual",
+            )
         )
-    )
 
     fig.update_layout(
         scene=dict(
-            xaxis_title="X", yaxis_title="Y", zaxis_title="Z", aspectmode="data"
+            xaxis_title="φ — Orientación (°)",
+            yaxis_title="θ — Inclinación (°)",
+            zaxis_title="E — Energía (kW)",
+            aspectmode="manual",
+            aspectratio=dict(x=1.5, y=0.5, z=0.5),
         ),
         margin=dict(l=0, r=0, t=30, b=0),
-        title="Panel Solar 3D",
+        title="Superficie de Energía E(θ, φ)",
     )
 
+    st.plotly_chart(fig, use_container_width=True)
+
+
+def contour_plot_E(A, theta0, phi0, res=40, current_point=None, grad_point=None):
+
+    data = obtener_superficie(A, theta0, phi0, res)
+    if data.get("status") != "success":
+        st.error("No se pudo generar el contorno")
+        return
+
+    Theta, Phi = np.meshgrid(data["theta"], data["phi"])
+    E = np.array(data["E"])
+
+    fig = go.Figure()
+
+    fig.add_trace(
+        go.Contour(
+            z=E,
+            x=data["phi"],
+            y=data["theta"],
+            colorscale="viridis",
+            contours=dict(showlabels=True),
+            colorbar=dict(title="E (kW)"),
+        )
+    )
+
+    if current_point:
+        theta_c, phi_c = current_point
+        fig.add_trace(
+            go.Scatter(
+                x=[phi_c],
+                y=[theta_c],
+                mode="markers",
+                marker=dict(size=10, color="red", symbol="x", line=dict(width=2)),
+                name="Config. actual",
+            )
+        )
+
+    if grad_point and current_point:
+        g_theta, g_phi = grad_point
+        g_mag = math.sqrt(g_theta**2 + g_phi**2)
+        if g_mag > 1e-10:
+            theta_c, phi_c = current_point
+            scale = 15
+            g_theta_norm = g_theta / g_mag
+            g_phi_norm = g_phi / g_mag
+            fig.add_annotation(
+                x=phi_c + g_phi_norm * scale,
+                y=theta_c + g_theta_norm * scale,
+                ax=phi_c,
+                ay=theta_c,
+                xref="x",
+                yref="y",
+                axref="x",
+                ayref="y",
+                showarrow=True,
+                arrowhead=2,
+                arrowsize=1.5,
+                arrowcolor="red",
+                text=f"∇E ({g_mag:.3f})",
+                font=dict(size=10, color="red"),
+            )
+
+    fig.update_layout(
+        xaxis_title="φ — Orientación (°)",
+        yaxis_title="θ — Inclinación (°)",
+        title="Curvas de Nivel de E(θ, φ)",
+        margin=dict(l=0, r=0, t=30, b=0),
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
+
+
+def simulation_chart(plot_data):
+    df = pd.DataFrame(plot_data)
+    fig = px.line(df, x="time", y="power", markers=True)
+    fig.update_layout(
+        xaxis_title="Hora del dia",
+        yaxis_title="Potencia (kW)",
+        margin=dict(l=0, r=0, t=10, b=0),
+    )
+    st.plotly_chart(fig, use_container_width=True)
+
+
+def comparison_energy_chart(df):
+    fig = px.bar(
+        df,
+        x="Panel",
+        y=["E (kW)", "E_max (kW)"],
+        barmode="group",
+        title="Energia Actual vs Maxima por Panel",
+    )
+    fig.update_layout(margin=dict(l=0, r=0, t=30, b=0))
+    st.plotly_chart(fig, use_container_width=True)
+
+
+def comparison_efficiency_chart(df):
+    fig = px.bar(
+        df,
+        x="Panel",
+        y="Rend. (%)",
+        title="Rendimiento Relativo por Panel",
+        color="Rend. (%)",
+        color_continuous_scale="RdYlGn",
+    )
+    fig.update_layout(margin=dict(l=0, r=0, t=30, b=0))
     st.plotly_chart(fig, use_container_width=True)
