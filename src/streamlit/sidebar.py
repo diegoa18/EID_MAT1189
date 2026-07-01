@@ -2,13 +2,13 @@ from persistencia import guardar_paneles
 
 import streamlit as st
 from api import simular
+from mapa import selector_mapa
 
 
 @st.dialog("Agregar panel")
 def dialogo_agregar_panel():
     nombre = st.text_input("Nombre", "Panel nuevo")
-    lat = st.number_input("Latitud", value=-36.82, format="%.4f", step=0.5)
-    lon = st.number_input("Longitud", value=-73.05, format="%.4f", step=0.5)
+    lat, lon = selector_mapa(key="nuevo", lat_default=-36.82, lon_default=-73.05)
     col_a, col_b = st.columns(2)
     with col_a:
         ancho = st.number_input("Ancho (m)", min_value=0.1, value=2.0, step=0.1)
@@ -41,7 +41,6 @@ def dialogo_agregar_panel():
             }
         )
         st.session_state.panel_index = len(st.session_state.paneles) - 1
-        st.session_state.panel_selector = st.session_state.panel_index
         guardar_paneles(st.session_state.paneles)
         st.rerun()
 
@@ -148,35 +147,31 @@ def render_sidebar():
                     )
 
             col1, col2, col3 = st.columns(3)
-            with col3:
+            with col1:
                 if st.button(
                     "🗑️ Eliminar", use_container_width=True, key=f"delete_btn_{uid}"
                 ):
-                    st.session_state.mostrar_confirmacion = True
+                    st.session_state[f"_delete_confirm_{uid}"] = True
 
-            if st.session_state.get("mostrar_confirmacion"):
-                confirm = st.slider(
-                    "Desliza para confirmar eliminación",
-                    0,
-                    1,
-                    0,
-                    key=f"delete_confirm_slider_{uid}",
-                )
-                if st.button(
-                    "Sí, eliminar permanentemente",
-                    use_container_width=True,
-                    disabled=confirm != 1,
-                ):
-                    st.session_state.paneles.pop(st.session_state.panel_index)
-                    if st.session_state.panel_index >= len(st.session_state.paneles):
-                        st.session_state.panel_index = (
-                            len(st.session_state.paneles) - 1
-                            if st.session_state.paneles
-                            else None
-                        )
-                    st.session_state.panel_selector = st.session_state.panel_index
-                    st.session_state.mostrar_confirmacion = False
-                    guardar_paneles(st.session_state.paneles)
-                    st.rerun()
+            confirm_key = f"_delete_confirm_{uid}"
+            if st.session_state.get(confirm_key):
+                st.warning("¿Eliminar este panel permanentemente?")
+                c_yes, c_no = st.columns(2)
+                with c_yes:
+                    if st.button("Sí, eliminar", use_container_width=True, key=f"del_yes_{uid}"):
+                        st.session_state.paneles.pop(st.session_state.panel_index)
+                        if st.session_state.panel_index >= len(st.session_state.paneles):
+                            st.session_state.panel_index = (
+                                len(st.session_state.paneles) - 1
+                                if st.session_state.paneles
+                                else None
+                            )
+                        st.session_state[confirm_key] = False
+                        guardar_paneles(st.session_state.paneles)
+                        st.rerun()
+                with c_no:
+                    if st.button("Cancelar", use_container_width=True, key=f"del_no_{uid}"):
+                        st.session_state[confirm_key] = False
+                        st.rerun()
 
         guardar_paneles(st.session_state.paneles)
