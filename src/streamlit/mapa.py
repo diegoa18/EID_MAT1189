@@ -1,6 +1,7 @@
-import streamlit as st
-from streamlit_folium import st_folium
 import folium
+from streamlit_folium import st_folium
+
+import streamlit as st
 
 
 def selector_mapa(key="mapa", lat_default=-36.82, lon_default=-73.05):
@@ -25,7 +26,11 @@ def selector_mapa(key="mapa", lat_default=-36.82, lon_default=-73.05):
 
     state_key = f"_map_sel_{key}"
     if state_key not in st.session_state:
-        st.session_state[state_key] = {"lat": lat_default, "lon": lon_default, "clicked": False}
+        st.session_state[state_key] = {
+            "lat": lat_default,
+            "lon": lon_default,
+            "clicked": False,
+        }
 
     state = st.session_state[state_key]
 
@@ -95,4 +100,4 @@ def mapa_paneles(paneles):
             icon=folium.Icon(color="red", icon="solar-panel", prefix="fa"),
         ).add_to(m)
 
-    st_folium(m, width=800, height=500)
+    st_folium(m, width=1400, height=500)

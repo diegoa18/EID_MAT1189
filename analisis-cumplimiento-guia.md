@@ -1,13 +1,23 @@
 # Análisis de Cumplimiento — Guía del Proyecto Final 5
 
-> **Última actualización:** 29 junio 2026
-> **Código fuente:** `src/streamlit/` (app Streamlit refactorizada)
+> **Última actualización:** 1 julio 2026
+> **Código fuente:** `src/streamlit/` (frontend) + `src/api/` (backend)
 
 ---
 
 ## Estado general
 
-El proyecto implementa el **nucleo completo de calculo multivariable** (secciones 6.1-6.9 de la guia) en la app Streamlit, incluyendo el análisis de la matriz Hessiana. Todas las funciones matematicas del modelo están conectadas exitosamente con la API de Flask, reemplazando los placeholders anteriores. Además, se implementó el modelo extendido para sombras usando integrales dobles proyectadas.
+El proyecto implementa el **núcleo completo de cálculo multivariable** (secciones 6.1-6.9 de la guía) en la app Streamlit, incluyendo el análisis de la matriz Hessiana. Todas las funciones matemáticas del modelo están conectadas exitosamente con la API de Flask. Se implementó el modelo extendido para sombras usando integrales dobles proyectadas, y se corrigieron errores de runtime en el simulador diario.
+
+---
+
+## Hallazgos importantes (corregidos)
+
+| Problema | Estado anterior | Solución aplicada |
+|----------|----------------|-------------------|
+| `calculate_daily_energy_details()` no existía | 🔴 Error runtime en `/api/simulate` | Método agregado en `simulator.py:63-79` |
+| `SolarSimulator.__init__` no aceptaba `shadows` | 🔴 TypeError al crear simulador | Parámetro `shadows` agregado en `simulator.py:5` |
+| `pysolar` no instalado → sombras siempre vacías | 🟡 Sombras nunca se detectaban | Documentado como dependencia requerida |
 
 ---
 
@@ -18,7 +28,7 @@ El proyecto implementa el **nucleo completo de calculo multivariable** (seccione
 | Elemento | Estado | Dónde |
 |----------|--------|-------|
 | **5.1** `E(θ,ϕ)=A·cos(θ−θ₀)·cos(φ−φ₀)` | 🟢 API Flask | `obtener_energia()` consumiendo ruta `/energy` |
-| **5.2** Modelo extendido (estaciones, sombras, etc.) | 🟢 | Estaciones: vía simulación diaria ✅. Sombras implementadas dinámicamente mediante integrales dobles de proyección solar ✅. Nubosidad/tracking solar opcionales. |
+| **5.2** Modelo extendido (estaciones, sombras, etc.) | 🟢 | Estaciones: vía simulación diaria ✅. Sombras: integral doble dinámica con `pysolar` + OpenStreetMap ✅. Nubosidad/tracking solar opcionales. |
 
 ### 6. Herramientas de cálculo multivariable
 
@@ -39,15 +49,16 @@ El proyecto implementa el **nucleo completo de calculo multivariable** (seccione
 | Funcionalidad | Estado | Dónde |
 |---------------|--------|-------|
 | Modificar θ y φ | 🟢 | Sidebar sliders |
-| Modificar ubicación geográfica | 🟢 | Sidebar lat/lon |
+| Modificar ubicación geográfica | 🟢 | Sidebar lat/lon + selector de mapa |
 | Calcular energía captada | 🟢 | `E(θ,φ)` actual como métrica en tab "Panel" |
 | Visualizar curvas de nivel | 🟢 | Tab "Contorno" |
 | Representar superficie 3D | 🟢 | Tab "Superficie" |
 | Calcular gradiente y derivadas parciales | 🟢 | Tab "Derivadas" |
 | Determinar configuraciones óptimas | 🟢 | Tab "Óptimo" |
 | Comparar configuraciones | 🟢 | Tab "Comparar" con tabla + gráficos de barras |
-| Simulación diaria (Riemann) | 🟢 | Botón "Simular día" en sidebar + gráfico en tab "Panel" |
+| Simulación diaria (Riemann) | 🟢 | Botón "Simular día" en sidebar + tab "Consumo Diario" |
 | Evaluar sensibilidad / incertidumbre | 🟢 | Tab "Incertidumbre" |
+| **Visualizar sombras** | 🟢 | **Nuevo tab "Sombras" con timeline, tabla de eventos y comparación con/sin sombra** |
 
 ### 8. Análisis de resultados
 
@@ -58,13 +69,12 @@ El proyecto implementa el **nucleo completo de calculo multivariable** (seccione
 | Interpretación de curvas de nivel | 🟢 Caption explicativo |
 | Sensibilidad frente a errores | 🟢 Sliders de perturbación |
 | Comparación óptimo vs actual | 🟢 Tab "Óptimo" con pérdidas |
+| Impacto de sombras en generación | 🟢 Tab "Sombras" con pérdida en kWh y % |
 | **Análisis escrito / reporte** | **🔴** |
 
 ---
 
-## Funciones de Rodri (Reemplazadas exitosamente)
-
-Las 4 funciones originales han sido exitosamente integradas con la API en Flask, implementando el modelo matemático en el backend y devolviendo JSON:
+## Funciones de la API
 
 | Función | Endpoint Flask | Calcula |
 |---------|-------|--------------------------|
@@ -72,7 +82,30 @@ Las 4 funciones originales han sido exitosamente integradas con la API en Flask,
 | `obtener_superficie` | `/api/surface` | Meshgrid `θ×φ` con `E` |
 | `obtener_optimo` | `/api/optimal` | `θ₀`, `φ₀`, `E_max` |
 | `obtener_derivada_direccional` | `/api/directional-derivative` | Producto punto: `∇E·(cosα, sinα)` |
-| `obtener_hessiano` | `/api/hessian` | Matriz Hessiana, autovalores, clasificación de ptos críticos |
+| `obtener_hessiano` | `/api/hessian` | Matriz Hessiana, autovalores, clasificación |
+| `simular` | `/api/simulate` | Simulación diaria con clima real + sombras |
+| `calcular` | `/api/calculate` | Incertidumbre por error angular |
+
+---
+
+## Nuevos tabs agregados
+
+| Tab | Contenido |
+|-----|-----------|
+| **Consumo Diario** | Curva de potencia diaria (con regiones sombreadas), energía acumulada, tabla horaria, datos ambientales (radiación, amanecer, atardecer) |
+| **Sombras** | Timeline de eventos de sombra, tabla de eventos (inicio, fin, duración, factor), métricas de impacto, comparación potencia con/sin sombra |
+
+---
+
+## Coordenadas verificadas con sombras (invierno)
+
+Requiere `pysolar` instalado.
+
+| Ubicación | Latitud | Longitud | Factor sombra |
+|-----------|---------|----------|---------------|
+| Costanera Center, Santiago | -33.4175 | -70.6060 | 0.9 (12:30-19:00) |
+| Paseo Ahumada, Santiago | -33.4370 | -70.6510 | 0.9 (12:00-19:00) |
+| Los Leones, Santiago | -33.4220 | -70.6090 | 0.79 (12:30-19:00) |
 
 ---
 
@@ -80,16 +113,24 @@ Las 4 funciones originales han sido exitosamente integradas con la API en Flask,
 
 | Categoría | Estado |
 |-----------|--------|
-| Modelo simplificado `E(θ,φ)` | 🟢 26/26 |
-| **Puntos críticos / Hessiano (6.7)** | 🟢 |
-| **Modelo extendido (sombras, nubosidad, tracking)** | 🟢 Sombras implementadas dinámicamente usando integrales dobles en proyección solar |
-| **Análisis escrito / reporte interpretativo** | **🔴** |
+| Modelo simplificado `E(θ,φ)` | 🟢 |
+| Derivadas, gradiente, direccional | 🟢 |
+| Plano tangente / linealización | 🟢 |
+| Puntos críticos / Hessiano | 🟢 |
+| Optimización | 🟢 |
+| Superficie 3D y curvas de nivel | 🟢 |
+| Simulación diaria (Riemann) | 🟢 |
+| Modelo extendido (sombras) | 🟢 (requiere `pysolar`) |
+| Visualización de sombras | 🟢 Nuevo tab dedicado |
+| Sensibilidad / incertidumbre | 🟢 |
 | Infraestructura (API + frontend + persistencia) | 🟢 |
+| **Análisis escrito / reporte interpretativo** | **🔴** |
 
-**Total: 25/26 requisitos cumplidos — 1 pendiente.**
+**Total: 25/26 requisitos cumplidos — 1 pendiente (análisis escrito).**
 
 ---
 
 ## Próximos pasos recomendados
 
 1. **Análisis escrito**: pestaña o sección con interpretación formal de resultados para cumplir con la documentación solicitada.
+2. Agregar `pysolar` a `requirements.txt` como dependencia obligatoria para sombras.

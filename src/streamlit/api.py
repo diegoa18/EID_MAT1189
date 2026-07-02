@@ -116,6 +116,7 @@ def obtener_derivada_direccional(theta, phi, A, theta0, phi0, alpha) -> Dict[str
     except requests.exceptions.RequestException as e:
         return {"status": "error", "message": str(e)}
 
+
 def obtener_hessiano(theta, phi, A, theta0, phi0) -> Dict[str, Any]:
     datos = {
         "theta": theta,

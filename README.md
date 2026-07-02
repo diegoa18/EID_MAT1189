@@ -1,87 +1,124 @@
 # Proyecto 5: Optimización de Paneles Solares
 
-Este proyecto implementa el modelo matemático descrito para la optimización de paneles solares usando Python.
+Este proyecto implementa el modelo matemático para la optimización de paneles solares usando una app interactiva Streamlit con backend Flask.
 
 ## Estructura del proyecto
 
-- `solar_optimization.py`: Contiene la clase `SolarPanelModel` y un script ejecutable para probar sus funcionalidades.
-- `venv/`: Entorno virtual de Python con las dependencias necesarias.
-- `solar_optimization_plots.png`: Imagen generada tras ejecutar el script, mostrando la superficie de energía y las curvas de nivel.
+```
+├── src/
+│   ├── api/                        # Backend Flask
+│   │   ├── app.py                  # Servidor API (punto de entrada)
+│   │   ├── routes/
+│   │   │   └── math_routes.py      # Endpoints REST (/energy, /surface, /optimal, /hessian, etc.)
+│   │   ├── models/
+│   │   │   ├── multivariable.py    # Modelo matemático E(θ,φ), gradiente, hessiano
+│   │   │   ├── solar_panel.py      # Panel solar, integrales de área
+│   │   │   ├── simulator.py        # Simulación diaria con suma de Riemann + sombras
+│   │   │   ├── environment.py      # Datos climáticos desde Open-Meteo API
+│   │   │   └── shadow_projector.py # Proyección de sombras con integrales dobles
+│   │   └── tests/                  # Tests automatizados
+│   └── streamlit/                  # Frontend Streamlit
+│       ├── main.py                 # App principal (11 tabs)
+│       ├── api.py                  # Cliente HTTP para Flask API
+│       ├── grapics.py              # Gráficos Plotly (superficie, contorno, sombras, etc.)
+│       ├── sidebar.py              # Barra lateral (gestión de paneles)
+│       ├── mapa.py                 # Mapa Folium interactivo
+│       └── persistencia.py         # Persistencia JSON de paneles
+├── analisis-cumplimiento-guia.md   # Checklist de requisitos
+└── README.md
+```
 
 ## Fundamento Teórico y Modelo Matemático
-
-El modelo matemático y sus componentes implementados en este proyecto se basan en las directrices establecidas en el documento de investigación del curso:
 
 > **Referencia Bibliográfica:**
 > Yunge, V. (2026). *PROYECTO FINAL 5: Optimización de paneles solares*. Departamento de Ciencias Matemáticas y Físicas, Curso MATE1189 - Cálculo Avanzado. Universidad Católica de Temuco.
 
-### 1. Función de Energía Captada
-
-El sistema modela la energía captada por un panel solar utilizando una función de dos variables que describe la disminución de eficiencia a medida que el panel se aleja de su posición óptima:
+### Función de Energía Captada
 
 $$ E(\theta, \phi) = A \cos(\theta - \theta_0) \cos(\phi - \phi_0) $$
 
-Donde:
-- $\theta$: Ángulo de inclinación respecto de la horizontal.
-- $\phi$: Ángulo de orientación respecto del norte geográfico.
-- $A > 0$: Representa la máxima energía posible de captar en la ubicación.
-- $\theta_0$: Corresponde al ángulo de inclinación ideal para la ubicación.
-- $\phi_0$: Corresponde a la orientación ideal para la ubicación geográfica estudiada.
+Donde $\theta$ es inclinación, $\phi$ es orientación, $A$ es potencia máxima, $\theta_0$ y $\phi_0$ son los ángulos óptimos.
 
-### 2. Derivadas Parciales y Sensibilidad
+### Derivadas Parciales
 
-Para evaluar la sensibilidad del sistema frente a errores de instalación y entender la tasa de cambio de la energía, se computan analíticamente las derivadas parciales de la función:
+$$ \frac{\partial E}{\partial \theta} = -A \sin(\theta - \theta_0) \cos(\phi - \phi_0) $$
+$$ \frac{\partial E}{\partial \phi} = -A \cos(\theta - \theta_0) \sin(\phi - \phi_0) $$
 
-- **Derivada respecto a la inclinación ($\theta$):**
-  $$ \frac{\partial E}{\partial \theta} = -A \sin(\theta - \theta_0) \cos(\phi - \phi_0) $$
-
-- **Derivada respecto a la orientación ($\phi$):**
-  $$ \frac{\partial E}{\partial \phi} = -A \cos(\theta - \theta_0) \sin(\phi - \phi_0) $$
-
-### 3. Gradiente y Optimización
-
-El vector gradiente construido se utiliza para determinar la dirección de máximo incremento de la energía captada. Su implementación computacional evalúa:
+### Gradiente
 
 $$ \nabla E(\theta, \phi) = \left( \frac{\partial E}{\partial \theta}, \frac{\partial E}{\partial \phi} \right) $$
 
-Al igualar $\nabla E(\theta, \phi) = \mathbf{0}$, se determinan matemáticamente las configuraciones óptimas de instalación del panel ($\theta = \theta_0$ y $\phi = \phi_0$).
-
 ## Ejecución
 
-Para ejecutar el código y ver los resultados en la terminal, activa el entorno virtual y ejecuta el script principal:
+### 1. Iniciar API Flask
 
 ```bash
-source venv/bin/activate
-python solar_optimization.py
-```
-
-Esto generará la salida por consola mostrando comparaciones de configuraciones y creará/actualizará la imagen `solar_optimization_plots.png` con las gráficas de superficie y curvas de nivel requeridas.
-
-## Prototipo de API (Flask)
-
-Se ha incluido un prototipo escalable basado en Flask para exponer el modelo matemático a través de un servicio web RESTful.
-
-### Levantar el servidor
-
-Para iniciar la API, ejecuta:
-
-```bash
-source venv/bin/activate
+cd src/api
+pip install flask requests pysolar
 python app.py
 ```
 
-El servidor se iniciará en `http://localhost:5000`.
+Servidor en `http://localhost:5000`.
 
-### Ejemplos de uso
+### 2. Iniciar Frontend Streamlit
 
-1. **Health Check:** Verificar que la API está funcionando.
-   ```bash
-   curl http://localhost:5000/api/health
-   ```
+```bash
+cd src/streamlit
+pip install streamlit plotly pandas requests folium streamlit-folium
+streamlit run main.py
+```
 
-2. **Calcular Energía (POST):** Enviar parámetros para evaluar una configuración.
-   ```bash
-   curl -X POST http://localhost:5000/api/calculate \
-   -H "Content-Type: application/json" \
-   -d '{"location": "Santiago", "theta": 40.0, "phi": 15.0}'
-   ```
+### 3. (Opcional) Entorno virtual
+
+```bash
+python3 -m venv venv
+source venv/bin/activate
+pip install flask requests pysolar streamlit plotly pandas folium streamlit-folium
+```
+
+## Endpoints de la API
+
+| Método | Ruta | Descripción |
+|--------|------|-------------|
+| GET | `/api/health` | Health check |
+| POST | `/api/energy` | `E`, derivadas parciales, gradiente |
+| POST | `/api/surface` | Meshgrid θ×φ con valores de `E` |
+| POST | `/api/optimal` | Ángulos óptimos `θ₀`, `φ₀` |
+| POST | `/api/directional-derivative` | Derivada direccional `∇E·(cosα, sinα)` |
+| POST | `/api/hessian` | Matriz Hessiana, autovalores, clasificación |
+| POST | `/api/simulate` | Simulación diaria con sombras y clima real |
+| POST | `/api/calculate` | Incertidumbre por errores angulares |
+
+## Tabs de la app Streamlit
+
+| Tab | Funcionalidad |
+|-----|--------------|
+| Panel | Métricas del panel seleccionado |
+| Superficie | Gráfico 3D de `E(θ,φ)` |
+| Contorno | Curvas de nivel con gradiente |
+| Derivadas | Derivadas parciales, direccional, interpretación |
+| Hessiano | Matriz Hessiana y clasificación de puntos críticos |
+| Óptimo | Comparación actual vs óptimo + plano tangente |
+| Comparar | Tabla comparativa entre paneles |
+| Incertidumbre | Sensibilidad a errores angulares |
+| **Consumo Diario** | Curva de potencia diaria, energía acumulada, sombras |
+| **Sombras** | Timeline de sombras, impacto en generación |
+| Mapa | Ubicación geográfica de los paneles |
+
+## Sombras (requiere pysolar)
+
+Para detectar sombras de edificios cercanos, instala:
+
+```bash
+pip install pysolar
+```
+
+Coordenadas de prueba con sombras verificadas (invierno):
+
+| Ubicación | Latitud | Longitud |
+|-----------|---------|----------|
+| Costanera Center, Santiago | -33.4175 | -70.6060 |
+| Paseo Ahumada, Santiago | -33.4370 | -70.6510 |
+| Los Leones, Santiago | -33.4220 | -70.6090 |
+
+Usa estación `winter` y presiona "Simular día" en la barra lateral.
