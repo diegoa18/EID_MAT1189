@@ -26,6 +26,7 @@ Simula la generacion diaria de energia basandose en el tamano fisico del panel, 
 - `height_m` (float): Alto del panel solar en metros.
 - `season` (str): Estacion del ano a consultar (ej. "summer", "winter").
 - `power_gen_kw` (float, opcional): Capacidad pico de generacion base en kW. Por defecto es 1.0.
+- `shadows` (list, opcional): Arreglo de objetos simulando sombras (ej. `[{"start_hour": 14.0, "end_hour": 15.5, "shade_factor": 0.8}]`).
 
 **Parametros retornados (JSON):**
 - `status` (str): Exito o fallo de la operacion.
@@ -42,7 +43,10 @@ Simula la generacion diaria de energia basandose en el tamano fisico del panel, 
   - `tilt_angle_deg` (float): Inclinacion optima calculada.
 - `results` (dict): Resultados de energia integrados.
   - `peak_power_kw` (float): Generacion tope aplicando area fisica e inclemencia del clima.
-  - `total_daily_energy_kwh` (float): Integral completa de la curva de poder diaria.
+  - `total_daily_energy_kwh` (float): Integral completa de la curva de poder diaria (incluyendo perdidas por sombras).
+  - `ideal_daily_energy_kwh` (float): Energia total diaria calculada sin perdidas por sombras.
+  - `energy_loss_from_shadows_kwh` (float): Energia perdida especificamente a causa de las sombras.
+  - `applied_shadows` (list): Lista de las sombras que fueron finalmente aplicadas en la simulacion, combinando las sombras manuales con las proyectadas por edificios.
 - `plot_data` (list): Arreglo de puntos para graficar (pares de `time` y `power`).
 
 ---
