@@ -18,6 +18,7 @@ from api import (
     obtener_energia,
     obtener_optimo,
     obtener_superficie,
+    obtener_hessiano,
 )
 
 if "paneles" not in st.session_state:
@@ -83,6 +84,7 @@ grad_angle = energia_res["grad_angle_deg"]
     tab_surface,
     tab_contour,
     tab_deriv,
+    tab_hessian,
     tab_optimal,
     tab_compare,
     tab_uncertainty,
@@ -93,6 +95,7 @@ grad_angle = energia_res["grad_angle_deg"]
         "Superficie",
         "Contorno",
         "Derivadas",
+        "Hessiano",
         "Optimo",
         "Comparar",
         "Incertidumbre",
@@ -275,8 +278,52 @@ with tab_deriv:
     else:
         st.info(
             f"Para maximizar E, ajusta θ y φ en la direccion {grad_angle:.1f}° "
-            "(seguir el gradiente). El optimo global es θ₀ = {theta0:.1f}°, φ₀ = {phi0:.1f}°."
+            f"(seguir el gradiente). El optimo global es θ₀ = {theta0:.1f}°, φ₀ = {phi0:.1f}°."
         )
+
+# ===================
+# TAB HESSIANO
+# ===================
+with tab_hessian:
+    st.subheader("Matriz Hessiana y Puntos Criticos")
+    st.caption("Analisis de curvatura y clasificacion de maximos/minimos usando la segunda derivada.")
+
+    hessian_res = obtener_hessiano(p["theta"], p["phi"], p["potencia"], theta0, phi0)
+    
+    if hessian_res.get("status") == "success":
+        mat = hessian_res["hessian_matrix"]
+        det = hessian_res["determinant"]
+        cls = hessian_res["classification"]
+        is_crit = hessian_res["is_critical"]
+        eig1, eig2 = hessian_res["eigenvalues"]
+        
+        st.write("**Matriz Hessiana H(θ, φ):**")
+        st.latex(r'''
+        H = \begin{pmatrix}
+        ''' + f"{mat[0][0]:.4f} & {mat[0][1]:.4f} \\\\ {mat[1][0]:.4f} & {mat[1][1]:.4f}" + r'''
+        \end{pmatrix}
+        ''')
+        
+        col_h1, col_h2, col_h3 = st.columns(3)
+        with col_h1:
+            st.metric("Determinante |H|", f"{det:.4f}")
+        with col_h2:
+            st.metric("Traza tr(H)", f"{mat[0][0] + mat[1][1]:.4f}")
+        with col_h3:
+            st.write("**Autovalores:**")
+            st.write(f"λ₁ = {eig1:.4f}")
+            st.write(f"λ₂ = {eig2:.4f}")
+            
+        st.divider()
+        st.write("**Clasificacion del Punto**")
+        if is_crit:
+            st.success(f"La configuracion actual ES un punto critico. Clasificacion: **{cls}**")
+        else:
+            st.warning(f"La configuracion actual NO es un punto critico (el gradiente no es cero).")
+            
+        st.info("Para encontrar un maximo/minimo local debes primero evaluar un punto donde el gradiente sea exactamente cero, y luego usar el criterio de la segunda derivada (determinante del Hessiano > 0 y derivada parcial doble < 0 para un maximo).")
+    else:
+        st.error("Error obteniendo los datos del Hessiano desde la API.")
 
 # ===================
 # TAB OPTIMO
