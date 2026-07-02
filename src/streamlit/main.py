@@ -8,6 +8,7 @@ from grapics import (
     simulation_chart,
     surface_plot_E,
 )
+from mapa import mapa_paneles
 from sidebar import render_sidebar
 
 import streamlit as st
@@ -87,6 +88,7 @@ grad_angle = energia_res["grad_angle_deg"]
     tab_optimal,
     tab_compare,
     tab_uncertainty,
+    tab_map,
 ) = st.tabs(
     [
         "Panel",
@@ -97,6 +99,7 @@ grad_angle = energia_res["grad_angle_deg"]
         "Optimo",
         "Comparar",
         "Incertidumbre",
+        "Mapa",
     ]
 )
 
@@ -522,3 +525,10 @@ with tab_uncertainty:
             f"{E_pert_ph:.4f} kW",
             delta=f"{E_pert_ph - E_actual:.4f}",
         )
+
+# ===================
+# TAB MAPA
+# ===================
+with tab_map:
+    st.subheader("Ubicacion de los Paneles")
+    mapa_paneles(st.session_state.paneles)
