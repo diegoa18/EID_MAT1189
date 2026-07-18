@@ -1,6 +1,18 @@
 import math
 
 import pandas as pd
+
+def float_to_time_str(h):
+    try:
+        h = float(h)
+    except (ValueError, TypeError):
+        return str(h)
+    hours = int(h)
+    minutes = int(round((h - hours) * 60))
+    if minutes == 60:
+        hours = (hours + 1) % 24
+        minutes = 0
+    return f"{hours:02d}:{minutes:02d}"
 from grapics import (
     accumulated_energy_chart,
     comparison_efficiency_chart,
@@ -10,6 +22,7 @@ from grapics import (
     shadow_timeline_chart,
     simulation_chart,
     surface_plot_E,
+    draw_3d_simulation,
 )
 from mapa import mapa_paneles
 from sidebar import render_sidebar
@@ -97,19 +110,21 @@ grad_angle = energia_res["grad_angle_deg"]
     tab_uncertainty,
     tab_daily,
     tab_shadows,
+    tab_3d_sim,
     tab_map,
 ) = st.tabs(
     [
         "Panel",
-        "Superficie",
-        "Contorno",
-        "Derivadas",
-        "Hessiano",
-        "Optimo",
-        "Comparar",
-        "Incertidumbre",
-        "Consumo Diario",
-        "Sombras",
+        "Vista 3D de Potencia (Superficie)",
+        "Mapa de Rendimiento (Contorno)",
+        "Sensibilidad Física (Derivadas/Gradiente)",
+        "Estabilidad de Diseño (Hessiano)",
+        "Punto Óptimo (Optimización)",
+        "Comparar Paneles",
+        "Tolerancia a Errores (Incertidumbre)",
+        "Generación Diaria (Riemann)",
+        "Estudio de Sombras (Integral)",
+        "Simulador 3D (Tiempo Real)",
         "Mapa",
     ]
 )
@@ -149,7 +164,7 @@ with tab_panel:
 # TAB SUPERFICIE
 # ===================
 with tab_surface:
-    st.subheader("Superficie de Energia E(θ, φ)")
+    st.subheader("Mapa 3D de Generación de Energía (Superficie de Energía $E(\\theta, \\phi)$)")
 
     col_res, _ = st.columns([1, 4])
     with col_res:
@@ -164,21 +179,21 @@ with tab_surface:
     )
 
     st.caption(
-        "La superficie muestra E(θ, φ) para todo el rango de angulos. "
-        "El punto rojo es la configuracion actual."
+        "Este gráfico 3D ilustra la potencia teórica estimada según la inclinación y orientación de los paneles "
+        "(Superficie de Energía $E(\\theta, \\phi)$). El punto rojo marca la posición y captación de energía actual de sus paneles."
     )
 
 # ===================
 # TAB CONTORNO
 # ===================
 with tab_contour:
-    st.subheader("Curvas de Nivel de E(θ, φ)")
+    st.subheader("Mapa de Rendimiento Solar (Curvas de Nivel y Contornos de Energía)")
 
     col_res2, _ = st.columns([1, 4])
     with col_res2:
         res_cont = st.slider("Resolucion", 15, 60, 30, key="res_cont")
 
-    show_grad = st.checkbox("Mostrar gradiente", value=True)
+    show_grad = st.checkbox("Mostrar dirección de mejora recomendada", value=True)
 
     contour_plot_E(
         A=p["potencia"],
@@ -190,33 +205,33 @@ with tab_contour:
     )
 
     st.caption(
-        "Las curvas de nivel conectan puntos con igual E(θ, φ). "
-        "La flecha roja muestra la direccion del gradiente (maximo crecimiento)."
+        "El mapa muestra líneas que conectan orientaciones e inclinaciones que producen la misma potencia (Curvas de Nivel). "
+        "La flecha roja indica la dirección de ajuste recomendada para obtener el incremento más rápido en captación de energía (Gradiente)."
     )
 
 # ===================
 # TAB DERIVADAS
 # ===================
 with tab_deriv:
-    st.subheader("Derivadas Parciales y Gradiente")
+    st.subheader("Sensibilidad al Movimiento y Dirección de Mejora (Derivadas Parciales y Gradiente)")
 
     col_d1, col_d2, col_d3 = st.columns(3)
     with col_d1:
-        st.metric("∂E/∂θ", f"{dE_th:.4f}")
-        st.caption(f"en θ = {p['theta']}°")
+        st.metric("Sensibilidad a la Inclinación (∂E/∂θ)", f"{dE_th:.4f}")
+        st.caption(f"en inclinación θ = {p['theta']}°")
     with col_d2:
-        st.metric("∂E/∂φ", f"{dE_ph:.4f}")
-        st.caption(f"en φ = {p['phi']}°")
+        st.metric("Sensibilidad a la Orientación (∂E/∂φ)", f"{dE_ph:.4f}")
+        st.caption(f"en orientación φ = {p['phi']}°")
     with col_d3:
-        st.metric("|∇E|", f"{grad_mag:.4f}")
-        st.caption(f"direccion: {grad_angle:.1f}°")
+        st.metric("Potencial de Ganancia Rápida (|∇E|)", f"{grad_mag:.4f}")
+        st.caption(f"rumbo recomendado: {grad_angle:.1f}°")
 
     st.divider()
 
-    st.subheader("Derivada Direccional")
-    st.caption("Derivada de E en una direccion α (grados desde el eje θ)")
+    st.subheader("Simulación de Sensibilidad en Dirección Específica (Derivada Direccional)")
+    st.caption("Muestra cuánta energía se gana o pierde al desviar el panel en un ángulo específico α respecto a su inclinación actual (Derivada Direccional).")
 
-    alpha = st.slider("Direccion α (°)", 0, 360, 45, 1, key="alpha_slider")
+    alpha = st.slider("Dirección de Desviación Propuesta α (°)", 0, 360, 45, 1, key="alpha_slider")
 
     dir_res = obtener_derivada_direccional(
         p["theta"], p["phi"], p["potencia"], theta0, phi0, alpha
@@ -226,45 +241,50 @@ with tab_deriv:
     c_dir1, c_dir2 = st.columns(2)
     with c_dir1:
         st.metric(
-            "D_u E(θ, φ)",
+            "Tasa de Cambio en la Dirección (Derivada Direccional $D_u E$)",
             f"{D:.4f}",
-            delta=f"{'Ascenso' if D > 0 else 'Descenso'}",
+            delta=f"{'Ganancia de Energía' if D > 0 else 'Pérdida de Energía'}",
         )
     with c_dir2:
         grad_dir = grad_angle
-        st.metric("Direccion de maximo ascenso", f"{grad_dir:.1f}°")
+        st.metric("Dirección del Mayor Incremento (Máximo Ascenso)", f"{grad_dir:.1f}°")
 
     st.divider()
 
-    st.subheader("Interpretacion")
+    st.subheader("Diagnóstico Comercial e Interpretación Matemática")
     theta_diff = p["theta"] - theta0
     phi_diff = p["phi"] - phi0
+    
     st.write(
-        f"- θ - θ₀ = {theta_diff:.1f}° {'(sobreinclinado)' if theta_diff > 0 else '(subinclinado)' if theta_diff < 0 else '(optimo)'}"
+        f"📍 **Ajuste de inclinación respecto al óptimo ($θ - θ_0$):** {theta_diff:.1f}° "
+        f"{'(sobreinclinado, capta menos sol)' if theta_diff > 0 else '(subinclinado, capta menos sol)' if theta_diff < 0 else '(inclinación perfecta)'}"
     )
     st.write(
-        f"- φ - φ₀ = {phi_diff:.1f}° {'(desviado)' if abs(phi_diff) > 5 else '(cerca del optimo)'}"
+        f"🧭 **Desviación de orientación respecto al óptimo ($φ - φ_0$):** {phi_diff:.1f}° "
+        f"{'(desviado, necesita corrección)' if abs(phi_diff) > 5 else '(orientación óptima)'}"
     )
     st.write(
-        f"- El gradiente indica la direccion de maximo aumento de energia: {grad_angle:.1f}°"
+        f"📈 **Dirección recomendada de ajuste rápido (Gradiente):** Mover el panel en una dirección de {grad_angle:.1f}° "
+        f"desde la inclinación actual proporcionará el mayor incremento inmediato en la captación solar."
     )
     if grad_mag < 0.01:
         st.success(
-            "El gradiente es ~0: estas en un punto critico (maximo, minimo o punto de silla)."
+            "✅ **¡Diseño optimizado al límite!** El gradiente es casi cero ($|∇E| \\approx 0$), lo que significa que el panel está posicionado en un punto de máxima generación solar (Punto Crítico/Máximo Local)."
         )
     else:
         st.info(
-            f"Para maximizar E, ajusta θ y φ en la direccion {grad_angle:.1f}° "
-            f"(seguir el gradiente). El optimo global es θ₀ = {theta0:.1f}°, φ₀ = {phi0:.1f}°."
+            f"💡 **Recomendación técnica para venta:** Para elevar la potencia del panel, debemos ajustar "
+            f"la inclinación y orientación siguiendo la dirección del Gradiente ({grad_angle:.1f}°). "
+            f"El punto de diseño perfecto (Máximo Global) se encuentra en una inclinación de $θ_0$ = {theta0:.1f}° y orientación de $φ_0$ = {phi0:.1f}°."
         )
 
 # ===================
 # TAB HESSIANO
 # ===================
 with tab_hessian:
-    st.subheader("Matriz Hessiana y Puntos Criticos")
+    st.subheader("Análisis de Estabilidad y Curvatura del Diseño (Matriz Hessiana y Puntos Críticos)")
     st.caption(
-        "Analisis de curvatura y clasificacion de maximos/minimos usando la segunda derivada."
+        "Determina la estabilidad de la eficiencia del panel solar alrededor del punto de diseño actual, identificando si estamos en un pico de generación, valle, o punto inestable (Criterio de la Segunda Derivada / Matriz Hessiana)."
     )
 
     hessian_res = obtener_hessiano(p["theta"], p["phi"], p["potencia"], theta0, phi0)
@@ -276,7 +296,7 @@ with tab_hessian:
         is_crit = hessian_res["is_critical"]
         eig1, eig2 = hessian_res["eigenvalues"]
 
-        st.write("**Matriz Hessiana H(θ, φ):**")
+        st.write("**Matriz de Estabilidad de Pendiente (Matriz Hessiana $H(θ, φ)$):**")
         st.latex(
             r"""
         H = \begin{pmatrix}
@@ -289,27 +309,27 @@ with tab_hessian:
 
         col_h1, col_h2, col_h3 = st.columns(3)
         with col_h1:
-            st.metric("Determinante |H|", f"{det:.4f}")
+            st.metric("Índice de Estabilidad de Curvatura (Determinante |H|)", f"{det:.4f}")
         with col_h2:
-            st.metric("Traza tr(H)", f"{mat[0][0] + mat[1][1]:.4f}")
+            st.metric("Tasa Global de Curvatura (Traza tr(H))", f"{mat[0][0] + mat[1][1]:.4f}")
         with col_h3:
-            st.write("**Autovalores:**")
+            st.write("**Factores de Curvatura Principal (Autovalores/Eigenvalues):**")
             st.write(f"λ₁ = {eig1:.4f}")
             st.write(f"λ₂ = {eig2:.4f}")
 
         st.divider()
-        st.write("**Clasificacion del Punto**")
+        st.write("**Clasificación de la Eficiencia en este Punto (Punto Crítico):**")
         if is_crit:
             st.success(
-                f"La configuracion actual ES un punto critico. Clasificacion: **{cls}**"
+                f"La configuración actual ES un punto de equilibrio operativo (Punto Crítico). Clasificación comercial: **{cls}**"
             )
         else:
             st.warning(
-                f"La configuracion actual NO es un punto critico (el gradiente no es cero)."
+                f"La configuración actual NO es un punto de equilibrio óptimo (Punto Crítico / el gradiente no es cero). Esto significa que aún hay margen para reorientar el panel y ganar más energía."
             )
 
         st.info(
-            "Para encontrar un maximo/minimo local debes primero evaluar un punto donde el gradiente sea exactamente cero, y luego usar el criterio de la segunda derivada (determinante del Hessiano > 0 y derivada parcial doble < 0 para un maximo)."
+            "💡 **Explicación Comercial/Matemática:** Para garantizar que el panel está en su máxima generación posible, primero buscamos un punto con cambio nulo (Gradiente cero) y luego confirmamos que la superficie se curva hacia abajo en todas las direcciones (Determinante del Hessiano > 0 y autovalores negativos, lo que clasifica el punto como un Máximo Local estable)."
         )
     else:
         st.error("Error obteniendo los datos del Hessiano desde la API.")
@@ -318,31 +338,31 @@ with tab_hessian:
 # TAB OPTIMO
 # ===================
 with tab_optimal:
-    st.subheader("Configuracion Optima")
+    st.subheader("Punto de Máxima Generación (Configuración Óptima)")
 
     col_opt1, col_opt2, col_opt3 = st.columns(3)
     with col_opt1:
-        st.metric("θ₀ opt (inclinacion)", f"{theta0:.1f}°")
+        st.metric("Inclinación Óptima (θ₀)", f"{theta0:.1f}°")
     with col_opt2:
-        st.metric("φ₀ opt (orientacion)", f"{phi0:.1f}°")
+        st.metric("Orientación Óptima (φ₀)", f"{phi0:.1f}°")
     with col_opt3:
-        st.metric("E_max (energia maxima)", f"{E_max:.4f} kW")
+        st.metric("Potencia Máxima Teórica (E_max)", f"{E_max:.4f} kW")
 
     st.divider()
 
-    st.subheader("Comparacion Actual vs Optimo")
+    st.subheader("Análisis Comparativo: Estado Actual vs Estado Óptimo")
 
     col_comp1, col_comp2 = st.columns(2)
     with col_comp1:
-        st.write("**Configuracion actual**")
-        st.write(f"θ = {p['theta']:.1f}°")
-        st.write(f"φ = {p['phi']:.1f}°")
-        st.write(f"E = {E_actual:.4f} kW")
+        st.write("**Configuración Actual**")
+        st.write(f"Inclinación θ = {p['theta']:.1f}°")
+        st.write(f"Orientación φ = {p['phi']:.1f}°")
+        st.write(f"Potencia E = {E_actual:.4f} kW")
     with col_comp2:
-        st.write("**Configuracion optima**")
-        st.write(f"θ₀ = {theta0:.1f}°")
-        st.write(f"φ₀ = {phi0:.1f}°")
-        st.write(f"E_max = {E_max:.4f} kW")
+        st.write("**Configuración Óptima Recomendada**")
+        st.write(f"Inclinación θ₀ = {theta0:.1f}°")
+        st.write(f"Orientación φ₀ = {phi0:.1f}°")
+        st.write(f"Potencia Máxima E_max = {E_max:.4f} kW")
 
     perdida = E_max - E_actual
     perdida_pct = (perdida / E_max * 100) if E_max > 0 else 0
@@ -350,27 +370,27 @@ with tab_optimal:
     st.divider()
     col_loss1, col_loss2 = st.columns(2)
     with col_loss1:
-        st.metric("Perdida absoluta", f"{perdida:.4f} kW", delta_color="inverse")
+        st.metric("Pérdida de Potencia Absoluta", f"{perdida:.4f} kW", delta_color="inverse")
     with col_loss2:
-        st.metric("Perdida relativa", f"{perdida_pct:.1f}%", delta_color="inverse")
+        st.metric("Porcentaje de Potencia Perdida", f"{perdida_pct:.1f}%", delta_color="inverse")
 
     if perdida_pct < 1:
-        st.success("El panel esta practicamente en su configuracion optima.")
+        st.success("El panel está prácticamente en su configuración óptima.")
     elif perdida_pct < 10:
         st.warning(
-            f"Se pierde ~{perdida_pct:.0f}% de energia. "
-            f"Ajustar θ a {theta0:.1f}° y φ a {phi0:.1f}°."
+            f"Se pierde ~{perdida_pct:.0f}% de energía. "
+            f"Ajustar inclinación θ a {theta0:.1f}° y orientación φ a {phi0:.1f}°."
         )
     else:
         st.error(
-            f"Se pierde ~{perdida_pct:.0f}% de energia. "
-            f"Recomendacion: inclinar a {theta0:.1f}° y orientar a {phi0:.1f}°."
+            f"Se pierde ~{perdida_pct:.0f}% de energía. "
+            f"Recomendación: inclinar a {theta0:.1f}° y orientar a {phi0:.1f}°."
         )
 
     st.divider()
 
-    st.subheader("Plano Tangente (Linealizacion)")
-    st.caption("Aproximacion lineal de E cerca de la configuracion actual.")
+    st.subheader("Estimación Rápida de Variación de Potencia (Plano Tangente y Linealización)")
+    st.caption("Usa la primera aproximación derivada (Plano Tangente) para predecir de forma simple cuánta potencia tendrá el panel ante pequeños cambios en la posición, ideal para hacer cálculos rápidos sin recalcular el modelo completo.")
 
     theta_eval = st.slider(
         "θ para evaluar", 0, 90, int(p["theta"] + 5), 1, key="theta_tp"
@@ -389,11 +409,11 @@ with tab_optimal:
 
     col_l1, col_l2, col_l3 = st.columns(3)
     with col_l1:
-        st.metric("E lineal (aprox)", f"{E_lineal:.4f} kW")
+        st.metric("Potencia Aproximada (Linealización)", f"{E_lineal:.4f} kW")
     with col_l2:
-        st.metric("E exacta", f"{E_exacta:.4f} kW")
+        st.metric("Potencia Real Esperada (Exacta)", f"{E_exacta:.4f} kW")
     with col_l3:
-        st.metric("Error", f"{abs(E_lineal - E_exacta):.4f} kW")
+        st.metric("Margen de Error del Modelo Lineal", f"{abs(E_lineal - E_exacta):.4f} kW")
 
 # ===================
 # TAB COMPARAR
@@ -439,17 +459,16 @@ with tab_compare:
 # TAB INCERTIDUMBRE
 # ===================
 with tab_uncertainty:
-    st.subheader("Analisis de Incertidumbre")
+    st.subheader("Tolerancia al Margen de Error en la Instalación (Análisis de Incertidumbre Angular)")
 
     st.caption(
-        "Evalua el impacto de errores angulares en la potencia generada. "
-        "Usa los parametros del panel seleccionado."
+        "Determina la pérdida promedio esperada si los instaladores cometen pequeños desvíos de inclinación u orientación durante el montaje físico, utilizando integrales dobles para promediar la potencia en el rango de error."
     )
 
-    delta_th = st.slider("Error θ (°)", 0.0, 20.0, 5.0, 0.5, key="uncer_theta")
-    delta_ph = st.slider("Error φ (°)", 0.0, 20.0, 5.0, 0.5, key="uncer_phi")
+    delta_th = st.slider("Margen de Error de Inclinación θ (°)", 0.0, 20.0, 5.0, 0.5, key="uncer_theta")
+    delta_ph = st.slider("Margen de Error de Orientación φ (°)", 0.0, 20.0, 5.0, 0.5, key="uncer_phi")
 
-    if st.button("Calcular incertidumbre", key="calc_uncer"):
+    if st.button("Calcular Tolerancia a Errores", key="calc_uncer"):
         st.session_state["calc_data"] = calcular(
             latitude=p["latitud"],
             longitude=p["longitud"],
@@ -464,12 +483,12 @@ with tab_uncertainty:
             col_u1, col_u2, col_u3 = st.columns(3)
             with col_u1:
                 st.metric(
-                    "Potencia ideal",
+                    "Potencia Ideal Estimada",
                     f"{calc_data['results']['ideal_peak_power_kw']:.3f} kW",
                 )
             with col_u2:
                 st.metric(
-                    "Potencia esperada",
+                    "Potencia Promedio Real con Error (Esperada)",
                     f"{calc_data['results']['expected_avg_power_kw']:.3f} kW",
                 )
             with col_u3:
@@ -477,7 +496,7 @@ with tab_uncertainty:
                     calc_data["results"]["ideal_peak_power_kw"]
                     - calc_data["results"]["expected_avg_power_kw"]
                 )
-                st.metric("Perdida por error angular", f"{loss:.3f} kW")
+                st.metric("Pérdida por Margen de Error (Vía Integrales)", f"{loss:.3f} kW")
         else:
             st.warning(
                 "API de incertidumbre no disponible. Verifica que el servidor Flask este corriendo."
@@ -485,8 +504,8 @@ with tab_uncertainty:
 
     st.divider()
 
-    st.subheader("Sensibilidad Local (desde E(θ, φ))")
-    st.caption("Variacion de E al perturbar θ y φ individualmente.")
+    st.subheader("Simulación de Desviaciones Individuales (Sensibilidad Local)")
+    st.caption("Muestra de forma rápida cómo cambia la potencia si solo se desvía la inclinación o solo la orientación por separado.")
 
     col_s1, col_s2 = st.columns(2)
     with col_s1:
@@ -519,8 +538,8 @@ with tab_uncertainty:
 # TAB CONSUMO DIARIO
 # ===================
 with tab_daily:
-    st.subheader("Consumo Energetico Diario")
-    st.caption("Simulacion de generacion de energia a lo largo del dia, incluyendo el efecto de sombras.")
+    st.subheader("Rendimiento Energético a lo Largo del Día (Simulación mediante Sumas de Riemann)")
+    st.caption("Calcula y simula la generación de energía total en el transcurso de un día, utilizando aproximaciones de rectángulos (Sumas de Riemann) para integrar la curva de potencia real con sombras.")
 
     if not p.get("simulacion") or p["simulacion"].get("status") != "success":
         st.info("Ejecuta 'Simular dia' desde la barra lateral para ver los datos.")
@@ -531,11 +550,11 @@ with tab_daily:
 
         col_met1, col_met2, col_met3 = st.columns(3)
         with col_met1:
-            st.metric("Energia total diaria", f"{data['results']['total_daily_energy_kwh']:.2f} kWh")
+            st.metric("Generación Diaria Real Estimada (Sumas de Riemann)", f"{data['results']['total_daily_energy_kwh']:.2f} kWh")
         with col_met2:
-            st.metric("Energia ideal (sin sombra)", f"{data['results']['ideal_daily_energy_kwh']:.2f} kWh")
+            st.metric("Generación Ideal Comercial (Sin Sombra)", f"{data['results']['ideal_daily_energy_kwh']:.2f} kWh")
         with col_met3:
-            st.metric("Perdida por sombras", f"{data['results']['energy_loss_from_shadows_kwh']:.3f} kWh", delta_color="inverse")
+            st.metric("Pérdida por Obstrucciones Externas", f"{data['results']['energy_loss_from_shadows_kwh']:.3f} kWh", delta_color="inverse")
 
         st.divider()
 
@@ -554,9 +573,9 @@ with tab_daily:
         with col_e1:
             st.metric("Radiacion solar", f"{env.get('radiation_mj_m2', 'N/A')} MJ/m²")
         with col_e2:
-            st.metric("Amanecer", f"{env.get('calculated_sunrise', 'N/A'):.1f}")
+            st.metric("Amanecer", float_to_time_str(env.get('calculated_sunrise', 'N/A')))
         with col_e3:
-            st.metric("Atardecer", f"{env.get('calculated_sunset', 'N/A'):.1f}")
+            st.metric("Atardecer", float_to_time_str(env.get('calculated_sunset', 'N/A')))
 
         st.divider()
 
@@ -566,15 +585,15 @@ with tab_daily:
         cols_show = [c for c in cols_show if c in df_plot.columns]
         df_display = df_plot[cols_show].copy()
         df_display.columns = ["Hora", "Potencia (kW)", "Potencia ideal (kW)", "Fraccion sombra"]
-        df_display["Hora"] = df_display["Hora"].apply(lambda x: f"{x:.2f}")
+        df_display["Hora"] = df_display["Hora"].apply(float_to_time_str)
         st.dataframe(df_display, use_container_width=True, hide_index=True)
 
 # ===================
 # TAB SOMBRAS
 # ===================
 with tab_shadows:
-    st.subheader("Analisis de Sombras")
-    st.caption("Eventos de sombra que afectan al panel durante el dia y su impacto en la generacion.")
+    st.subheader("Análisis de Sombras del Entorno (Integral Doble de Superficie)")
+    st.caption("Identifica y calcula la reducción de luz en el panel debido a obstáculos físicos cercanos, integrando la porción de área obstruida en cada instante (Integral Doble de Área).")
 
     if not p.get("simulacion") or p["simulacion"].get("status") != "success":
         st.info("Ejecuta 'Simular dia' desde la barra lateral para ver los datos.")
@@ -591,8 +610,8 @@ with tab_shadows:
 
             st.subheader("Eventos de Sombra")
             df_shadows = pd.DataFrame(shadows)
-            df_shadows["Hora inicio"] = df_shadows["start_hour"].apply(lambda x: f"{x:.2f}")
-            df_shadows["Hora fin"] = df_shadows["end_hour"].apply(lambda x: f"{x:.2f}")
+            df_shadows["Hora inicio"] = df_shadows["start_hour"].apply(float_to_time_str)
+            df_shadows["Hora fin"] = df_shadows["end_hour"].apply(float_to_time_str)
             df_shadows["Duracion (h)"] = (df_shadows["end_hour"] - df_shadows["start_hour"]).round(2)
             df_shadows["Factor sombra"] = df_shadows["shade_factor"].apply(lambda x: f"{x*100:.1f}%")
             df_display_shadows = df_shadows[["Hora inicio", "Hora fin", "Duracion (h)", "Factor sombra"]]
@@ -600,18 +619,18 @@ with tab_shadows:
 
             st.divider()
 
-            st.subheader("Impacto en la Generacion")
+            st.subheader("Impacto Comercial de Sombras")
             col_s1, col_s2, col_s3 = st.columns(3)
             with col_s1:
                 perdida = data["results"].get("energy_loss_from_shadows_kwh", 0)
-                st.metric("Perdida total por sombras", f"{perdida:.3f} kWh")
+                st.metric("Pérdida por Obstrucción de Área", f"{perdida:.3f} kWh")
             with col_s2:
                 ideal = data["results"].get("ideal_daily_energy_kwh", 0)
                 pct = (perdida / ideal * 100) if ideal > 0 else 0
-                st.metric("Porcentaje de perdida", f"{pct:.1f}%")
+                st.metric("Rendimiento Perdido por Sombras", f"{pct:.1f}%")
             with col_s3:
                 horas_sombra = sum(s["end_hour"] - s["start_hour"] for s in shadows)
-                st.metric("Horas con sombra", f"{horas_sombra:.2f} h")
+                st.metric("Duración Total de Sombreado", f"{horas_sombra:.2f} h")
 
             st.divider()
 
@@ -620,6 +639,106 @@ with tab_shadows:
         else:
             st.success("No se detectaron sombras significativas para este panel en esta ubicacion y fecha.")
             st.caption("Esto puede deberse a que no hay edificios cercanos o la altura del sol reduce el efecto.")
+
+# ===================
+# TAB SIMULACION 3D
+# ===================
+@st.cache_data
+def get_buildings(lat, lon):
+    radius = 80
+    overpass_url = "https://overpass-api.de/api/interpreter"
+    overpass_query = f"""
+    [out:json];
+    (
+      way["building"](around:{radius},{lat},{lon});
+      relation["building"](around:{radius},{lat},{lon});
+    );
+    out body geom;
+    """
+    buildings = []
+    try:
+        import requests
+        headers = {"User-Agent": "SolarOptimizationApp/1.0"}
+        response = requests.get(
+            overpass_url,
+            params={"data": overpass_query},
+            headers=headers,
+            timeout=8,
+        )
+        data = response.json()
+        
+        deg_to_m_lat = 111320.0
+        deg_to_m_lon = 40075000.0 * math.cos(math.radians(lat)) / 360.0
+        
+        for element in data.get("elements", []):
+            if "geometry" not in element:
+                continue
+            tags = element.get("tags", {})
+            height = float(tags.get("height", 0))
+            if height == 0:
+                levels = float(tags.get("building:levels", 1))
+                height = levels * 3.0
+                
+            pts = []
+            for node in element["geometry"]:
+                dy = (node["lat"] - lat) * deg_to_m_lat
+                dx = (node["lon"] - lon) * deg_to_m_lon
+                pts.append((dx, dy))
+                
+            if len(pts) >= 3:
+                buildings.append({"polygon": pts, "height": height})
+    except Exception:
+        pass
+        
+    if not buildings:
+        buildings = [
+            {
+                "polygon": [
+                    (6.0, 4.0),
+                    (9.0, 4.0),
+                    (9.0, 10.0),
+                    (6.0, 10.0)
+                ],
+                "height": 12.0
+            },
+            {
+                "polygon": [
+                    (-10.0, -8.0),
+                    (-7.0, -8.0),
+                    (-7.0, -5.0),
+                    (-10.0, -5.0)
+                ],
+                "height": 8.0
+            }
+        ]
+    return buildings
+
+
+with tab_3d_sim:
+    st.subheader("Simulación de Incidencia Solar y Sombras en 3D")
+    st.caption("Visualización interactiva tridimensional en tiempo real del panel solar recibiendo luz solar y las sombras proyectadas por edificios/obstáculos circundantes.")
+    
+    h_sim = st.slider("Hora de la simulación", min_value=6.0, max_value=18.0, value=12.0, step=0.25, format="%g h")
+    h_int = int(h_sim)
+    m_int = int((h_sim - h_int) * 60)
+    st.markdown(f"**Hora seleccionada: {h_int:02d}:{m_int:02d}**")
+    
+    buildings_local = get_buildings(p["latitud"], p["longitud"])
+    
+    fig_3d = draw_3d_simulation(
+        lat=p["latitud"],
+        lon=p["longitud"],
+        tilt_deg=p["theta"],
+        azimuth_deg=p["phi"],
+        panel_width=p.get("ancho", 1.0),
+        panel_height=p.get("alto", 1.6),
+        hour_float=h_sim,
+        buildings=buildings_local
+    )
+    
+    st.plotly_chart(fig_3d, use_container_width=True)
+    st.info("💡 **Guía de Interacción:** Mantén presionado y arrastra el cursor sobre el gráfico para rotar el punto de vista 3D. Usa la rueda del mouse para hacer zoom.")
+
 
 # ===================
 # TAB MAPA
