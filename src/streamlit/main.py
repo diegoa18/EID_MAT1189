@@ -480,22 +480,16 @@ with tab_uncertainty:
     if "calc_data" in st.session_state:
         calc_data = st.session_state["calc_data"]
         if calc_data.get("status") == "success":
+            results = calc_data.get("results", {})
+            ideal_peak = results.get("ideal_peak_power_kw", 0.0)
+            expected_avg = results.get("expected_avg_power_kw", 0.0)
+            loss = ideal_peak - expected_avg
             col_u1, col_u2, col_u3 = st.columns(3)
             with col_u1:
-                st.metric(
-                    "Potencia Ideal Estimada",
-                    f"{calc_data['results']['ideal_peak_power_kw']:.3f} kW",
-                )
+                st.metric("Potencia Ideal Estimada", f"{ideal_peak:.3f} kW")
             with col_u2:
-                st.metric(
-                    "Potencia Promedio Real con Error (Esperada)",
-                    f"{calc_data['results']['expected_avg_power_kw']:.3f} kW",
-                )
+                st.metric("Potencia Promedio Real con Error (Esperada)", f"{expected_avg:.3f} kW")
             with col_u3:
-                loss = (
-                    calc_data["results"]["ideal_peak_power_kw"]
-                    - calc_data["results"]["expected_avg_power_kw"]
-                )
                 st.metric("Pérdida por Margen de Error (Vía Integrales)", f"{loss:.3f} kW")
         else:
             st.warning(
@@ -548,13 +542,17 @@ with tab_daily:
         plot_data = data["plot_data"]
         shadows = data["results"].get("applied_shadows", [])
 
+        total_daily_energy = data["results"].get("total_daily_energy_kwh", data["results"].get("daily_energy_kwh", 0))
+        ideal_daily_energy = data["results"].get("ideal_daily_energy_kwh", total_daily_energy)
+        energy_loss = data["results"].get("energy_loss_from_shadows_kwh", 0.0)
+
         col_met1, col_met2, col_met3 = st.columns(3)
         with col_met1:
-            st.metric("Generación Diaria Real Estimada (Sumas de Riemann)", f"{data['results']['total_daily_energy_kwh']:.2f} kWh")
+            st.metric("Generación Diaria Real Estimada (Sumas de Riemann)", f"{total_daily_energy:.2f} kWh")
         with col_met2:
-            st.metric("Generación Ideal Comercial (Sin Sombra)", f"{data['results']['ideal_daily_energy_kwh']:.2f} kWh")
+            st.metric("Generación Ideal Comercial (Sin Sombra)", f"{ideal_daily_energy:.2f} kWh")
         with col_met3:
-            st.metric("Pérdida por Obstrucciones Externas", f"{data['results']['energy_loss_from_shadows_kwh']:.3f} kWh", delta_color="inverse")
+            st.metric("Pérdida por Obstrucciones Externas", f"{energy_loss:.3f} kWh", delta_color="inverse")
 
         st.divider()
 
@@ -584,8 +582,15 @@ with tab_daily:
         cols_show = ["time", "power", "power_ideal", "shade_factor"]
         cols_show = [c for c in cols_show if c in df_plot.columns]
         df_display = df_plot[cols_show].copy()
-        df_display.columns = ["Hora", "Potencia (kW)", "Potencia ideal (kW)", "Fraccion sombra"]
-        df_display["Hora"] = df_display["Hora"].apply(float_to_time_str)
+        col_map = {
+            "time": "Hora",
+            "power": "Potencia (kW)",
+            "power_ideal": "Potencia ideal (kW)",
+            "shade_factor": "Fraccion sombra",
+        }
+        df_display = df_display.rename(columns=col_map)
+        if "Hora" in df_display.columns:
+            df_display["Hora"] = df_display["Hora"].apply(float_to_time_str)
         st.dataframe(df_display, use_container_width=True, hide_index=True)
 
 # ===================
